@@ -47,8 +47,10 @@ Now build your image:
 Check your new image:
 
 ```
-  $ docker images | grep app
-  app                  96b7d64           1e5fc99a1368        2 minutes ago       697.7 MB
+  $ docker images
+  REPOSITORY                   TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+  app                          96b7d64             ca497f258c64        13 seconds ago      697.7 MB
+  app                          latest              ca497f258c64        13 seconds ago      697.7 MB
 ```
 
 Check your container's logs:
