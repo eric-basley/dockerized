@@ -16,10 +16,18 @@ Clone this last one and install node's packages:
   $ git clone https://github.com/eric-basley/dockerized.git
   $ npm install
 ```
-The script let you choose the commit version you would like to build, get it on gitHub or clone dockerized-app:
+
+Fork the sample project and update Dockerfile to use it:
 
 ```
-  $ git clone https://github.com/eric-basley/dockerized-app.git
+  RUN git clone https://github.com/<your app>.git /app
+```
+
+
+The script let you choose the commit version you would like to build, get it on gitHub or clone locally your sample project:
+
+```
+  $ git clone https://github.com/<your app>.git
   $ git log -1 --format="%h"
   96b7d64
 ```
@@ -40,10 +48,10 @@ Check your new image:
 
 ```
   $ docker images | grep app
-  app-96b7d64                  latest              1e5fc99a1368        2 minutes ago       697.7 MB
+  app                  96b7d64           1e5fc99a1368        2 minutes ago       697.7 MB
 ```
 
-Check your new running container:
+Check your container's logs:
 
 ```
   $ docker logs -f app
