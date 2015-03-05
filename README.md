@@ -8,7 +8,7 @@ You need Nodejs, npm and docker running.
 
 ### Usage
 
-We have2 repositories, one for a sample [project](https://github.com/redpelicans/dockerized-app.git) to dockerized and this one about deployment process.
+You need 2 repositories, one for a sample [project](https://github.com/redpelicans/dockerized-app.git) to be dockerized and this one to automate deployment.
 
 Clone this last one and install node's packages:
 
