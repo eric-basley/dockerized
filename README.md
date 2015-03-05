@@ -17,12 +17,26 @@ Clone this last one and install node's packages:
   $ npm install
 ```
 
-Fork the sample project and update Dockerfile to use it:
+Fork the sample project, or create yours and update params.js as:
 
 ```
-  RUN git clone https://github.com/<your app>.git /app
+module.exports = {
+  app: {
+    name: 'app',
+    repo: 'https://github.com/<your app>.git',
+  },
+  docker: {
+    name: '<your name>',
+    auth:{
+      username: '<your username>',
+      password: '<your password>',
+      email: '<your email>',
+      serveraddress: "https://index.docker.io/v1/"
+    }
+  }
+}
 ```
-
+If you use a new app, update start.sh script to launch your app inside the container.
 
 The script let you choose the commit version you would like to build, get it on gitHub or clone locally your sample project:
 
@@ -60,10 +74,14 @@ Check your container's logs:
   Running App version: { gitVersion: '96b7d64', revision: '96b7d64' }
 ```
 
-Push your image to DockerHub as redpelicans/dockerized
+Push your image to DockerHub:
 
 ```
-  $ ./sbin/push --tag 
+  ./sbin/push --hash 96b7d64 --tag 0.2
+  You dream of a new image's version?
+  Let's push it...
+  ...
+
 ```
 
 
