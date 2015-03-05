@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
 var async = require('async')
-  , spawn = require('child_process').spawn
   , util = require('util')
   , path = require('path')
   , exec = require('child_process').exec
   , yargs = require('yargs')
   , Docker = require('dockerode')
   , debug = require('debug')('main')
+  , params = require('../params')
   , _ = require('lodash');
 
 var Transform = require('stream').Transform;
@@ -23,16 +23,14 @@ DockerStream.prototype._transform = function(chunk, encoding, cb){
   if(data.error){
     this.emit('error', new Error(data.error));
   }else{
-    this.push(data.stream);
+    this.push(data.stream || data.status + "\n");
   }
   cb();
 }
 
 var prgName = path.basename(process.argv[1]);
 
-var commands = [
-  "build",
-];
+var commands = [ "build", "push" ];
 
 if(!_.contains(commands, prgName))return help();
 
@@ -46,6 +44,105 @@ function run(command){
   eval(command+'()');
 }
 
+function push(){
+  var argv = require('yargs')
+    .usage("Push new image\nUsage: $0")
+    .require('hash')
+    .describe('hash',"git hash")
+    .require('tag')
+    .describe('tag',"new version")
+    .argv;
+
+  var context = {
+    containerName: params.app.name,
+    get imageName(){ return this.containerName },
+    gitHubRepoName: params.docker.name, 
+    docker: new Docker(),
+    commit: argv.hash,
+    tag: argv.tag,
+    repo: params.app.repo,
+    dockerAuth: params.docker.auth
+  }
+
+  run(function(err){
+    if(err){
+      console.log("\n");
+      console.error("push", err.toString());
+      return console.error("push", "I'm afraid that something goes wrong!");
+    }
+    console.log("\n");
+    console.log("push", "That's all folks.");
+  });
+
+  function run(cb){
+    console.log("You dream of a new image's version?");
+    console.log("Let's push it...\n");
+    async.waterfall([
+        createGitDir.bind(null, context)
+      , gitClone
+      , gitCheckout
+      , gitTag
+      , gitPush
+      , dockerTag
+      , dockerPush
+    ], cb)
+  };
+
+  function createGitDir(context, cb){
+    context.tmpDir = util.format("./tmp/%s", context.commit);
+    var cmd =  util.format("rm -rf %s ", context.tmpDir);
+    doExec(cmd, $(context, cb));
+  }
+
+  function gitClone(context, cb){
+    var cmd = util.format("git clone %s %s", context.repo, context.tmpDir);
+    doExec(cmd, {strict: false}, $(context, cb));
+  }
+
+  function gitCheckout(context, cb){
+    var cmd = util.format("cd %s && git checkout %s", context.tmpDir, context.commit);
+    doExec(cmd, {strict: false}, $(context, cb));
+  }
+
+  function gitTag(context, cb){
+    var cmd = util.format("cd %s && git tag -a %s -m 'version %s'", context.tmpDir, context.tag, context.tag);
+    doExec(cmd, {strict: true}, $(context, cb));
+  }
+
+  function gitPush(context, cb){
+    var cmd = util.format("cd %s && git push origin %s", context.tmpDir, context.commit);
+    doExec(cmd, {strict: false}, $(context, cb));
+  }
+
+  function dockerTag(context, cb){
+    var image = context.docker.getImage(context.imageName);
+    image.tag({repo: util.format("%s/%s", context.gitHubRepoName, context.containerName), tag: context.tag}, function(err){
+      if(err)return cb(err);
+      debug("docker  tag %s %s/%s:%s", context.imageName, context.gitHubRepoName, context.containerName, context.tag);
+      cb(null, context);
+    });
+  }
+
+
+  function dockerPush(context, cb){
+    var image = context.docker.getImage(util.format("%s/%s", context.gitHubRepoName, context.containerName));
+    image.push({tag: context.tag}, function(err, stream){
+      if(err)return cb(err);
+
+      var dockerio = new DockerStream();
+      stream.pipe(dockerio).pipe(process.stdout);
+      stream.on('end', function(){ 
+        debug("docker  push %s %s/%s:%s", context.imageName, context.gitHubRepoName, context.containerName, context.tag);
+        cb(null, context) 
+      });
+
+      dockerio.on('error', function(err){ cb(err) });
+    },
+    context.dockerAuth);
+  }
+
+}
+
 
 function build(){
   var argv = require('yargs')
@@ -56,8 +153,8 @@ function build(){
 
   var context = {
     dockerDir: "./tmp",
-    get imageName(){ return "app-" + this.hash },
-    containerName: 'app',
+    get imageName(){ return this.containerName },
+    containerName: params.app.name,
     docker: new Docker(),
     hash: argv.hash,
   }
@@ -78,9 +175,11 @@ function build(){
     console.log("Let's build it...");
     async.waterfall([
       createDockerContext.bind(null, context),
-      setupDockerFile,
+      setupHashDockerFile,
+      setupAppDockerFile,
       createTarImage,
       dockerBuild,
+      dockerTag,
       dockerRemove,
       dockerCreate,
       dockerStart
@@ -96,7 +195,7 @@ function build(){
         return _.find(containerInfo.Names, function(name){ return regexp.test(name) });
       });
       if(runningInfo){
-        console.log(runningCockpitInfo)
+        console.log(runningInfo)
         var container = context.docker.getContainer(runningInfo.Id);
         debug("docker remove");
         container.remove({force: true, v:true}, $(context, cb));
@@ -125,9 +224,9 @@ function build(){
 
   function dockerStart(context, container, cb){
     var config = {
-      Binds: [util.format("%s:/config", __dirname+"/config")],
-      Links: ['mongo:mongo'],
-      PortBindings:{ "443/tcp": [{HostPort: "443"}] }
+      //Binds: [util.format("%s:/config", __dirname+"/config")],
+      //PortBindings:{ "443/tcp": [{HostPort: "443"}] }
+      //Links: ['mongo:mongo'],
     };
 
     container.start(config, function(err){
@@ -135,7 +234,7 @@ function build(){
       container.inspect(function(err, data){
         if(err)return cb(err);
         console.log(data);
-        log.info( "Container '%s' is now running with git rev: %s", context.containerName, context.hash);
+        debug( "Container '%s' is now running with git rev: %s", context.containerName, context.hash);
         cb(null, context);
       });
     });
@@ -147,7 +246,7 @@ function build(){
   }
 
   function dockerBuild(context, cb){
-    context.docker.buildImage(util.format("%s/dockerfile.tar", context.dockerDir), {t: context.imageName}, function(err, stream){
+    context.docker.buildImage(util.format("%s/dockerfile.tar", context.dockerDir), {nocache: true, t: context.imageName}, function(err, stream){
       if(err)return cb(err);
       var dockerio = new DockerStream();
       stream.pipe(dockerio).pipe(process.stdout);
@@ -156,10 +255,27 @@ function build(){
     });
   }
 
-  function setupDockerFile(context, cb){
+  function dockerTag(context, cb){
+    var image = context.docker.getImage(context.imageName);
+    image.tag({repo: util.format("%s", context.containerName), tag: context.hash}, function(err){
+      if(err)return cb(err);
+      debug("docker  tag %s %s:%s", context.imageName, context.containerName, context.hash);
+      cb(null, context);
+    });
+  }
+
+
+  function setupHashDockerFile(context, cb){
     var cmd =  util.format("cd %s && sed -i 's/__HASH__/%s/' Dockerfile", context.dockerDir, context.hash);
     doExec(cmd, {strict: false}, $(context, cb));
   }
+
+  function setupAppDockerFile(context, cb){
+    var sed = util.format("$(echo %s | sed -e 's/\\//\\\\\\//g')", params.app.repo);
+    var cmd =  util.format('cd %s && sed -i "s/__REPO__/%s/" Dockerfile', context.dockerDir, sed);
+    doExec(cmd, {strict: false}, $(context, cb));
+  }
+
 
 
   function createDockerContext(context, cb){
@@ -180,14 +296,19 @@ function doExec(cmd, options, cb){
     cb = options;
     options = {strict: true};
   }
-  debug("exec ", "%s", cmd);
+  debug("%s", cmd);
   exec(cmd, function(err, stdout, stderr){ 
     if(stdout)debug(stdout);
     if(stderr)console.error(stderr);
-    cb(options.strict ? err||stderr : err);
+    if(options.strict){
+      if(err)return cb(err);
+      if(stderr)return cb(new Error(stderr));
+      cb();
+    }else{
+      cb(err);
+    }
   });
 }
 
 function $(context, cb){
-  return function(err){ cb(err, context)}
-}
+  return function(err){ cb(err, context)}}

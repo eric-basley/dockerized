@@ -2,7 +2,7 @@ FROM node:latest
 
 ENV HOME /root
 
-RUN git clone https://github.com/redpelicans/dockerized-app.git /app
+RUN git clone __REPO__ /app
 
 ENV APP_REVISION __HASH__
 
