@@ -8,7 +8,7 @@ You need Nodejs, npm and docker running.
 
 ### Usage
 
-We have2 repositories, one for a sample [project](https://github.com/redpelicans/dockerized-app.git) to dockerized and this one about deployment process.
+You need 2 repositories, one for a sample [project](https://github.com/redpelicans/dockerized-app.git) to be dockerized and this one to automate deployment.
 
 Clone this last one and install node's packages:
 
@@ -16,10 +16,32 @@ Clone this last one and install node's packages:
   $ git clone https://github.com/eric-basley/dockerized.git
   $ npm install
 ```
-The script let you choose the commit version you would like to build, get it on gitHub or clone dockerized-app:
+
+Fork the sample project, or create yours and update params.js as:
 
 ```
-  $ git clone https://github.com/eric-basley/dockerized-app.git
+module.exports = {
+  app: {
+    name: 'app',
+    repo: 'https://github.com/<your app>.git',
+  },
+  docker: {
+    name: '<your name>',
+    auth:{
+      username: '<your username>',
+      password: '<your password>',
+      email: '<your email>',
+      serveraddress: "https://index.docker.io/v1/"
+    }
+  }
+}
+```
+If you use a new app, update start.sh script to launch your app inside the container.
+
+The script let you choose the commit version you would like to build, get it on gitHub or clone locally your sample project:
+
+```
+  $ git clone https://github.com/<your app>.git
   $ git log -1 --format="%h"
   96b7d64
 ```
@@ -39,21 +61,27 @@ Now build your image:
 Check your new image:
 
 ```
-  $ docker images | grep app
-  app-96b7d64                  latest              1e5fc99a1368        2 minutes ago       697.7 MB
+  $ docker images
+  REPOSITORY                   TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+  app                          96b7d64             ca497f258c64        13 seconds ago      697.7 MB
+  app                          latest              ca497f258c64        13 seconds ago      697.7 MB
 ```
 
-Check your new running container:
+Check your container's logs:
 
 ```
   $ docker logs -f app
   Running App version: { gitVersion: '96b7d64', revision: '96b7d64' }
 ```
 
-Push your image to DockerHub as redpelicans/dockerized
+Push your image to DockerHub:
 
 ```
-  $ ./sbin/push --tag 
+  ./sbin/push --hash 96b7d64 --tag 0.2
+  You dream of a new image's version?
+  Let's push it...
+  ...
+
 ```
 
 
